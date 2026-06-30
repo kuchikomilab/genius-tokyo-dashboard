@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>GENIUS TOKYO アンケート ダッシュボード</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Noto+Serif+JP:wght@500;700&family=Zen+Kaku+Gothic+New:wght@400;500;700&display=swap" rel="stylesheet" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
+<script>
+  // ここに、GASウェブアプリのデプロイURLを貼り付けてください
+  // 例: const GAS_URL = "https://script.google.com/macros/s/xxxxxxxx/exec";
+  const GAS_URL = "";
+</script>
+<style>
+  :root{
+    --theme:#0A0A0B; --surface:#141311; --surface2:#0E0D0A;
+    --accent:#C9A646; --accent-soft:rgba(201,166,70,.16); --light:rgba(201,166,70,.10);
+    --text:#EDE9E2; --muted:#948C78; --border:rgba(201,166,70,.28); --border-soft:rgba(201,166,70,.14);
+    --err:#C9544A; --ok:#7FAE8E;
+  }
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+  body{
+    font-family:'Zen Kaku Gothic New',sans-serif;
+    background:var(--theme); color:var(--text); min-height:100vh; padding-bottom:60px;
+  }
+  body::before{
+    content:''; position:fixed; inset:0; pointer-events:none; z-index:-1;
+    background:
+      radial-gradient(ellipse 700px 400px at 50% -5%, rgba(201,166,70,.08), transparent 60%),
+      radial-gradient(ellipse 500px 500px at 100% 100%, rgba(201,166,70,.05), transparent 60%);
+  }
+  header{
+    text-align:center; padding:44px 20px 30px; border-bottom:1px solid var(--border-soft);
+    position:relative;
+  }
+  header::after{
+    content:''; position:absolute; left:50%; bottom:-1px; width:120px; height:1px;
+    transform:translateX(-50%); background:var(--accent);
+  }
+  .crest-line{ width:40px; height:1px; background:var(--accent); margin:0 auto 14px; opacity:.7; }
+  h1{
+    font-family:'Cormorant Garamond',serif; font-weight:600; font-size:clamp(24px,5vw,32px);
+    letter-spacing:.1em;
+  }
+  .sub{
+    font-family:'Noto Serif JP',serif; font-size:12px; color:var(--muted);
+    letter-spacing:.06em; margin-top:10px;
+  }
+  .updated{ font-size:11px; color:var(--muted); margin-top:18px; letter-spacing:.04em; }
+  .container{ max-width:1080px; margin:0 auto; padding:32px 18px; }
+
+  .kpi-row{
+    display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr));
+    gap:14px; margin-bottom:28px;
+  }
+  .kpi{
+    background:var(--surface); border:1px solid var(--border-soft); padding:22px 18px;
+    position:relative; text-align:center;
+  }
+  .kpi::before{
+    content:''; position:absolute; top:0; left:0; width:100%; height:1px;
+    background:linear-gradient(90deg,var(--accent),transparent 70%); opacity:.55;
+  }
+  .kpi .num{ font-family:'Cormorant Garamond',serif; font-size:34px; font-weight:600; color:var(--accent); }
+  .kpi .label{ font-size:11.5px; color:var(--muted); margin-top:6px; letter-spacing:.04em; }
+
+  .grid2{ display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:16px; }
+  @media (max-width: 760px){ .grid2{ grid-template-columns:1fr; } }
+
+  .panel{
+    background:var(--surface); border:1px solid var(--border-soft); padding:24px 22px;
+    position:relative; margin-bottom:16px;
+  }
+  .panel::before{
+    content:''; position:absolute; top:0; left:0; width:100%; height:1px;
+    background:linear-gradient(90deg,var(--accent),transparent 70%); opacity:.55;
+  }
+  .panel h2{
+    font-family:'Noto Serif JP',serif; font-size:14px; font-weight:700; margin-bottom:18px;
+    letter-spacing:.02em;
+  }
+  .panel h2 .mark{ color:var(--accent); margin-right:6px; }
+  canvas{ max-height:280px; }
+
+  .comment-list{ display:flex; flex-direction:column; gap:14px; max-height:480px; overflow-y:auto; }
+  .comment{
+    border:1px solid var(--border-soft); padding:14px 16px; background:var(--surface2);
+  }
+  .comment .meta{ display:flex; justify-content:space-between; font-size:11px; color:var(--muted); margin-bottom:8px; }
+  .comment .meta .stars{ color:var(--accent); letter-spacing:1px; }
+  .comment .body{ font-size:13px; line-height:1.7; color:var(--text); }
+
+  .empty-state{
+    text-align:center; padding:80px 20px; color:var(--muted);
+  }
+  .empty-state .icon{ width:40px; height:40px; margin:0 auto 18px; color:var(--accent); }
+  .empty-state h3{ font-family:'Cormorant Garamond',serif; font-size:20px; color:var(--text); margin-bottom:10px; letter-spacing:.04em; }
+  .empty-state p{ font-size:12.5px; line-height:1.8; max-width:420px; margin:0 auto; }
+  .empty-state code{ color:var(--accent); }
+
+  .loading{ text-align:center; padding:80px 20px; color:var(--muted); font-size:13px; letter-spacing:.06em; }
+
+  .bar-row{ display:flex; align-items:center; gap:10px; margin-bottom:10px; font-size:12px; }
+  .bar-row .bar-label{ width:140px; flex-shrink:0; color:var(--muted); }
+  .bar-row .bar-track{ flex:1; height:8px; background:var(--border-soft); position:relative; }
+  .bar-row .bar-fill{ height:100%; background:var(--accent); }
+  .bar-row .bar-val{ width:36px; text-align:right; color:var(--text); flex-shrink:0; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="crest-line"></div>
+  <h1>GENIUS TOKYO</h1>
+  <p class="sub">アンケート ダッシュボード</p>
+  <p class="updated" id="updated-at"></p>
+</header>
+
+<div class="container" id="app">
+  <div class="loading" id="loading">読み込み中…</div>
+</div>
+
+<script>
+async function loadDashboard() {
+  const app = document.getElementById('app');
+
+  if (!GAS_URL) {
+    app.innerHTML = emptyState(
+      'GAS URLが未設定です',
+      'このファイル上部の <code>const GAS_URL = "";</code> に、デプロイしたGoogle Apps ScriptウェブアプリのURLを貼り付けてください。'
+    );
+    return;
+  }
+
+  try {
+    const res = await fetch(GAS_URL);
+    const data = await res.json();
+
+    if (data.status === 'error') {
+      app.innerHTML = emptyState('データ取得エラー', data.message || '不明なエラーが発生しました。');
+      return;
+    }
+
+    if (!data.totalResponses) {
+      app.innerHTML = emptyState('まだ回答がありません', 'アンケートに回答が送信されると、ここに自動で集計結果が表示されます。');
+      document.getElementById('updated-at').textContent = '最終更新: ' + formatDate(data.generatedAt);
+      return;
+    }
+
+    render(data);
+    document.getElementById('updated-at').textContent = '最終更新: ' + formatDate(data.generatedAt);
+  } catch (err) {
+    app.innerHTML = emptyState('接続エラー', '読み込みに失敗しました。GASのデプロイ設定（アクセス権限「全員」）をご確認ください。');
+    console.error(err);
+  }
+}
+
+function emptyState(title, body) {
+  return `
+    <div class="empty-state">
+      <svg class="icon" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="24" cy="24" r="22" stroke="currentColor" stroke-width="1"/>
+        <path d="M24 16v12M24 32h.02" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+      </svg>
+      <h3>${title}</h3>
+      <p>${body}</p>
+    </div>
+  `;
+}
+
+function formatDate(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  return d.toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' });
+}
+
+function starRow(label, value, max = 5) {
+  const pct = value ? (value / max) * 100 : 0;
+  return `
+    <div class="bar-row">
+      <div class="bar-label">${label}</div>
+      <div class="bar-track"><div class="bar-fill" style="width:${pct}%"></div></div>
+      <div class="bar-val">${value ?? '—'}</div>
+    </div>
+  `;
+}
+
+function render(data) {
+  const app = document.getElementById('app');
+  app.innerHTML = `
+    <div class="kpi-row">
+      <div class="kpi"><div class="num">${data.totalResponses}</div><div class="label">総回答数</div></div>
+      <div class="kpi"><div class="num">${data.averages.overall ?? '—'}</div><div class="label">総合満足度（平均）</div></div>
+      <div class="kpi"><div class="num">${data.copyClicks}</div><div class="label">口コミコピー実行数</div></div>
+      <div class="kpi"><div class="num">${data.comments.length}</div><div class="label">コメント件数</div></div>
+    </div>
+
+    <div class="grid2">
+      <div class="panel">
+        <h2><span class="mark">—</span>項目別 平均評価</h2>
+        ${starRow('総合満足度', data.averages.overall)}
+        ${starRow('音楽・DJ', data.averages.music)}
+        ${starRow('雰囲気', data.averages.atmosphere)}
+        ${starRow('接客', data.averages.staff)}
+        ${starRow('ドリンク', data.averages.drink)}
+      </div>
+      <div class="panel">
+        <h2><span class="mark">—</span>総合満足度の分布</h2>
+        <canvas id="chart-distribution"></canvas>
+      </div>
+    </div>
+
+    <div class="grid2">
+      <div class="panel">
+        <h2><span class="mark">—</span>来店動機</h2>
+        <canvas id="chart-purpose"></canvas>
+      </div>
+      <div class="panel">
+        <h2><span class="mark">—</span>流入経路</h2>
+        <canvas id="chart-source"></canvas>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2><span class="mark">—</span>日別回答数 ＆ 平均満足度</h2>
+      <canvas id="chart-trend"></canvas>
+    </div>
+
+    <div class="panel">
+      <h2><span class="mark">—</span>お客様からのコメント</h2>
+      <div class="comment-list" id="comment-list"></div>
+    </div>
+  `;
+
+  renderCharts(data);
+  renderComments(data.comments);
+}
+
+function chartTheme() {
+  return {
+    accent: '#C9A646',
+    grid: 'rgba(201,166,70,.10)',
+    text: '#948C78',
+    font: { family: "'Zen Kaku Gothic New', sans-serif", size: 11 }
+  };
+}
+
+function renderCharts(data) {
+  const t = chartTheme();
+  Chart.defaults.color = t.text;
+  Chart.defaults.font = t.font;
+  Chart.defaults.borderColor = t.grid;
+
+  new Chart(document.getElementById('chart-distribution'), {
+    type: 'bar',
+    data: {
+      labels: ['★1', '★2', '★3', '★4', '★5'],
+      datasets: [{
+        data: [1,2,3,4,5].map(n => data.distributions.overall[String(n)] || 0),
+        backgroundColor: t.accent,
+        borderRadius: 2,
+        maxBarThickness: 36
+      }]
+    },
+    options: {
+      plugins: { legend: { display: false } },
+      scales: {
+        y: { beginAtZero: true, ticks: { precision: 0 }, grid: { color: t.grid } },
+        x: { grid: { display: false } }
+      }
+    }
+  });
+
+  const purposeEntries = Object.entries(data.purpose || {});
+  new Chart(document.getElementById('chart-purpose'), {
+    type: 'bar',
+    data: {
+      labels: purposeEntries.map(e => e[0]),
+      datasets: [{
+        data: purposeEntries.map(e => e[1]),
+        backgroundColor: t.accent,
+        borderRadius: 2,
+        maxBarThickness: 28
+      }]
+    },
+    options: {
+      indexAxis: 'y',
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { beginAtZero: true, ticks: { precision: 0 }, grid: { color: t.grid } },
+        y: { grid: { display: false } }
+      }
+    }
+  });
+
+  const sourceEntries = Object.entries(data.source || {});
+  new Chart(document.getElementById('chart-source'), {
+    type: 'doughnut',
+    data: {
+      labels: sourceEntries.map(e => e[0]),
+      datasets: [{
+        data: sourceEntries.map(e => e[1]),
+        backgroundColor: ['#C9A646','#8A7638','#5A4E28','#EDE9E2','#948C78','#3A331E','#705F30'],
+        borderColor: '#141311',
+        borderWidth: 2
+      }]
+    },
+    options: {
+      plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, padding: 12 } } }
+    }
+  });
+
+  new Chart(document.getElementById('chart-trend'), {
+    type: 'bar',
+    data: {
+      labels: data.trend.map(d => d.date.slice(5)),
+      datasets: [
+        {
+          type: 'bar',
+          label: '回答数',
+          data: data.trend.map(d => d.count),
+          backgroundColor: 'rgba(201,166,70,.35)',
+          borderRadius: 2,
+          yAxisID: 'y'
+        },
+        {
+          type: 'line',
+          label: '平均満足度',
+          data: data.trend.map(d => d.avgOverall),
+          borderColor: '#C9A646',
+          backgroundColor: '#C9A646',
+          tension: .3,
+          yAxisID: 'y1',
+          pointRadius: 3
+        }
+      ]
+    },
+    options: {
+      plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, padding: 12 } } },
+      scales: {
+        y: { beginAtZero: true, ticks: { precision: 0 }, grid: { color: t.grid }, position: 'left' },
+        y1: { beginAtZero: true, max: 5, position: 'right', grid: { display: false } },
+        x: { grid: { display: false } }
+      }
+    }
+  });
+}
+
+function renderComments(comments) {
+  const list = document.getElementById('comment-list');
+  if (!comments.length) {
+    list.innerHTML = '<p style="color:var(--muted);font-size:12.5px;">コメントはまだありません。</p>';
+    return;
+  }
+  list.innerHTML = comments.map(c => `
+    <div class="comment">
+      <div class="meta">
+        <span>${formatDate(c.timestamp)}</span>
+        <span class="stars">${c.overall ? '★'.repeat(c.overall) + '☆'.repeat(5 - c.overall) : ''}</span>
+      </div>
+      <div class="body">${escapeHtml(c.message)}</div>
+    </div>
+  `).join('');
+}
+
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+loadDashboard();
+</script>
+</body>
+</html>
